@@ -47,7 +47,14 @@ for device_id, profile in output.get("profiles", {}).items():
 
 
 if output:
-    default_packages, output["arch_packages"] = run(
+    make_env = environ.copy()
+    make_env["TOPDIR"] = str(Path.cwd())
+    # dict.update() returns None, so the old env= argument never applied.
+    # Inherited QUIET=1 also prints a "make[0] -C ..." trace on stdout and
+    # breaks the two-value unpack. Drop make's tracing state.
+    for key in ("MAKEFLAGS", "MAKELEVEL", "QUIET", "OPENWRT_VERBOSE"):
+        make_env.pop(key, None)
+    result = run(
         [
             "make",
             "--no-print-directory",
@@ -59,9 +66,11 @@ if output:
         stdout=PIPE,
         stderr=PIPE,
         check=True,
-        env=environ.copy().update({"TOPDIR": Path().cwd()}),
+        env=make_env,
         universal_newlines=True,
-    ).stdout.splitlines()
+    )
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    default_packages, output["arch_packages"] = lines[-2], lines[-1]
 
     output["default_packages"] = sorted(default_packages.split())
 
